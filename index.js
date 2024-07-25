@@ -36,6 +36,18 @@ const getTransactions = async (address, numTx) => {
           // Convert block time to a human-readable date
           const date = new Date(transaction.blockTime * 1000);
 
+          // Determine if the transaction is a send or receive operation
+          const isSendTransaction =
+            txDetails.meta?.preBalances && txDetails.meta?.postBalances;
+
+          // Calculate the amount in the token's units (e.g., SOL from lamports)
+          let amount = 0;
+          if (isSendTransaction) {
+            amount =
+              (txDetails.meta.preBalances[0] - txDetails.meta.postBalances[0]) /
+              Math.pow(10, 9);
+          }
+
           // Extract relevant information from transaction details
           return {
             uuid: uuid.v4(), // Generate a unique identifier for the transaction
@@ -43,20 +55,11 @@ const getTransactions = async (address, numTx) => {
             fee: txDetails.meta?.fee || 0, // Transaction fee
             compute_units_consumed: txDetails.meta?.computeUnits || 0, // Compute units used
             timestamp: date.toISOString(), // ISO format date string
-            type:
-              txDetails.meta?.preBalances && txDetails.meta?.postBalances
-                ? "send_token" // Determine the type of transaction
-                : "receive_token",
+            type: isSendTransaction ? "send_token" : "receive_token", // Determine the type of transaction
             wallet_address: address, // The wallet address for which transactions are being retrieved
             transaction_hash: transaction.signature, // Transaction signature (hash)
             metadata: {
-              amount: txDetails.meta?.preBalances
-                ? (
-                    txDetails.meta.preBalances[0] - // Pre-transaction balance
-                    txDetails.meta.postBalances[0]
-                  ) // Post-transaction balance
-                    .toString()
-                : "0", // Default amount if no balance information is available
+              amount: amount.toString(), // Convert amount to a string
             },
             token: {
               uuid: uuid.v4(), // Dummy UUID for the token
