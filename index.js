@@ -24,10 +24,20 @@ const getTransactions = async (address, numTx) => {
       { limit: numTx }
     );
 
+    // Track used signatures to identify duplicates
+    const seenSignatures = new Set();
+
     // Fetch detailed information for each transaction signature
     const transactions = await Promise.all(
       transactionList.map(async (transaction) => {
         try {
+          // Check for duplicate signatures
+          if (seenSignatures.has(transaction.signature)) {
+            console.log(`Duplicate signature found: ${transaction.signature}`);
+          } else {
+            seenSignatures.add(transaction.signature);
+          }
+
           // Fetch the full transaction details
           const txDetails = await solanaConnection.getTransaction(
             transaction.signature
@@ -36,16 +46,34 @@ const getTransactions = async (address, numTx) => {
           // Convert block time to a human-readable date
           const date = new Date(transaction.blockTime * 1000);
 
-          // Determine if the transaction is a send or receive operation
-          const isSendTransaction =
-            txDetails.meta?.preBalances && txDetails.meta?.postBalances;
+          // Determine if the transaction is a send, receive, or swap operation
+          let type = "unknown";
+          if (
+            txDetails.meta?.preTokenBalances &&
+            txDetails.meta?.postTokenBalances
+          ) {
+            type = "swap";
+          } else if (
+            txDetails.meta?.preBalances &&
+            txDetails.meta?.postBalances
+          ) {
+            type = "send_token";
+          } else {
+            type = "receive_token";
+          }
 
           // Calculate the amount in the token's units (e.g., SOL from lamports)
           let amount = 0;
-          if (isSendTransaction) {
+          if (type === "send_token") {
             amount =
               (txDetails.meta.preBalances[0] - txDetails.meta.postBalances[0]) /
               Math.pow(10, 9);
+          } else if (type === "swap") {
+            // Handle swap transactions; this is a simplified example
+            amount = txDetails.meta.postTokenBalances.reduce(
+              (sum, balance) => sum + (balance.uiTokenAmount.uiAmount || 0),
+              0
+            );
           }
 
           // Extract relevant information from transaction details
@@ -55,7 +83,7 @@ const getTransactions = async (address, numTx) => {
             fee: txDetails.meta?.fee || 0, // Transaction fee
             compute_units_consumed: txDetails.meta?.computeUnits || 0, // Compute units used
             timestamp: date.toISOString(), // ISO format date string
-            type: isSendTransaction ? "send_token" : "receive_token", // Determine the type of transaction
+            type, // Type of transaction
             wallet_address: address, // The wallet address for which transactions are being retrieved
             transaction_hash: transaction.signature, // Transaction signature (hash)
             metadata: {
