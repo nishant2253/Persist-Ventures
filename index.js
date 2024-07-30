@@ -1,5 +1,4 @@
 const solanaWeb3 = require("@solana/web3.js");
-const axios = require("axios"); // For HTTP requests (not used in this snippet)
 const uuid = require("uuid"); // For generating UUIDs
 
 // Address to search for transactions
@@ -34,6 +33,7 @@ const getTransactions = async (address, numTx) => {
           // Check for duplicate signatures
           if (seenSignatures.has(transaction.signature)) {
             console.log(`Duplicate signature found: ${transaction.signature}`);
+            return null; // Skip processing duplicate signatures
           } else {
             seenSignatures.add(transaction.signature);
           }
@@ -43,6 +43,14 @@ const getTransactions = async (address, numTx) => {
             transaction.signature
           );
 
+          // Check if txDetails is defined
+          if (!txDetails) {
+            console.error(
+              `No details found for transaction: ${transaction.signature}`
+            );
+            return null;
+          }
+
           // Convert block time to a human-readable date
           const date = new Date(transaction.blockTime * 1000);
 
@@ -50,15 +58,22 @@ const getTransactions = async (address, numTx) => {
           let type = "unknown";
           if (
             txDetails.meta?.preTokenBalances &&
-            txDetails.meta?.postTokenBalances
+            txDetails.meta?.postTokenBalances &&
+            txDetails.meta.preTokenBalances.length > 0 &&
+            txDetails.meta.postTokenBalances.length > 0
           ) {
             type = "swap";
           } else if (
             txDetails.meta?.preBalances &&
-            txDetails.meta?.postBalances
+            txDetails.meta?.postBalances &&
+            txDetails.meta.preBalances.length > 0 &&
+            txDetails.meta.postBalances.length > 0
           ) {
             type = "send_token";
-          } else {
+          } else if (
+            txDetails.meta?.preBalances &&
+            txDetails.meta.preBalances.length > 0
+          ) {
             type = "receive_token";
           }
 
@@ -71,7 +86,7 @@ const getTransactions = async (address, numTx) => {
           } else if (type === "swap") {
             // Handle swap transactions; this is a simplified example
             amount = txDetails.meta.postTokenBalances.reduce(
-              (sum, balance) => sum + (balance.uiTokenAmount.uiAmount || 0),
+              (sum, balance) => sum + (balance.uiTokenAmount?.uiAmount || 0),
               0
             );
           }
@@ -134,5 +149,5 @@ const getTransactions = async (address, numTx) => {
   }
 };
 
-// Call the function to get transactions for the given address (limit to 1 transaction)
-getTransactions(searchAddress, 1);
+// Call the function to get transactions for the given address (limit to 2 transactions)
+getTransactions(searchAddress, 5);
